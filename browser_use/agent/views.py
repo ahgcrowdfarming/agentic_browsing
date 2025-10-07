@@ -5,6 +5,7 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, Literal
+from unittest import result
 
 from openai import RateLimitError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
@@ -328,6 +329,7 @@ class AgentHistoryList(BaseModel, Generic[AgentStructuredOutput]):
 
 	def add_item(self, history_item: AgentHistory) -> None:
 		"""Add a history item to the list"""
+		print(f"🧩 [Agent Debug] Adding history item. Current number of steps: {self.number_of_steps()}")
 		self.history.append(history_item)
 
 	def __repr__(self) -> str:
@@ -343,6 +345,7 @@ class AgentHistoryList(BaseModel, Generic[AgentStructuredOutput]):
 				json.dump(data, f, indent=2)
 		except Exception as e:
 			raise e
+		
 
 	# def save_as_playwright_script(
 	# 	self,
@@ -423,10 +426,52 @@ class AgentHistoryList(BaseModel, Generic[AgentStructuredOutput]):
 
 	def is_done(self) -> bool:
 		"""Check if the agent is done"""
-		if self.history and len(self.history[-1].result) > 0:
-			last_result = self.history[-1].result[-1]
-			return last_result.is_done is True
+		print(f"🧩 [Agent Debug] Checking is_done for all history items (steps: {self.number_of_steps()})")
+		for step_idx, h in enumerate(self.history):
+			for result_idx, r in enumerate(h.result):
+				print(f"    [Agent Debug] Step {step_idx}, Result {result_idx}: is_done={getattr(r, 'is_done', None)}, success={getattr(r, 'success', None)}, error={getattr(r, 'error', None)}")
+				if getattr(r, "is_done", False):
+					print(f"🧩 [Agent Debug] is_done() called, returns: True (step {self.number_of_steps()})")
+					return True
+		print(f"🧩 [Agent Debug] is_done() called, returns: False (step {self.number_of_steps()})")
 		return False
+	
+		#ORIGINAL IS_DONE
+		# if self.history and len(self.history[-1].result) > 0:
+		# 	last_result = self.history[-1].result[-1]
+		# 	return last_result.is_done is True
+		# return False
+
+		# TEST 2 IS_DONE
+		# for item in self.history:
+		# 	if item.result and any(
+        #         hasattr(r, "is_done") and r.is_done for r in item.result):
+		# 		return True
+		# return False
+
+		# TEST 3 IS_DONE
+		# result = any(r.is_done is True for h in self.history for r in h.result)
+		# print(f"🧩 [Agent Debug] is_done() called, returns: {result}")
+		# return result
+
+		#TEST 4 IS_DONE
+		# Return True if ANY result in ANY history item has is_done=True
+		# for h in self.history:
+		# 	for r in h.result:
+		# 		if getattr(r, "is_done", False):
+		# 			print(f"🧩 [Agent Debug] is_done() called, returns: True (step {self.number_of_steps()})")
+		# 			return True
+		# print(f"🧩 [Agent Debug] is_done() called, returns: False (step {self.number_of_steps()})")
+		# return False
+
+		# TEST 5 IS_DONE
+		# for h in self.history:
+		# 	for r in h.result:
+		# 		if getattr(r, "is_done", False):
+		# 			print(f"🧩 [Agent Debug] is_done() called, returns: True (step {self.number_of_steps()})")
+		# 			return True
+		# print(f"🧩 [Agent Debug] is_done() called, returns: False (step {self.number_of_steps()})")
+		# return False
 
 	def is_successful(self) -> bool | None:
 		"""Check if the agent completed successfully - the agent decides in the last step if it was successful or not. None if not done yet."""

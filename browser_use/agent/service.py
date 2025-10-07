@@ -129,6 +129,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		self,
 		task: str,
 		llm: BaseChatModel,
+		output_dir: str | Path | None = None,
+		product: str | None = None,
 		# Optional parameters
 		page: Page | None = None,
 		browser: Browser | BrowserSession | None = None,
@@ -284,7 +286,11 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 		timestamp = int(time.time())
 		base_tmp = Path(tempfile.gettempdir())
-		self.agent_directory = base_tmp / f'browser_use_agent_{self.id}_{timestamp}'
+
+		if output_dir is not None:
+			self.agent_directory = Path(output_dir) / f'{product}_{timestamp}'
+		else:
+			self.agent_directory = base_tmp / f'browser_use_agent_{self.id}_{timestamp}'
 
 		# Initialize file system and screenshot service
 		self._set_file_system(file_system_path)
@@ -994,6 +1000,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		)
 
 		self.history.add_item(history_item)
+		print(f"🧩 [Agent Debug] Added new AgentHistory. Total steps: {len(self.history)}")
 
 	def _remove_think_tags(self, text: str) -> str:
 		THINK_TAGS = re.compile(r'<think>.*?</think>', re.DOTALL)
@@ -1029,7 +1036,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 	def _log_agent_run(self) -> None:
 		"""Log the agent run"""
-		self.logger.info(f'🚀 Starting task: {self.task}')
+		self.logger.info(f'🚀 Starting task...')
 
 		self.logger.debug(f'🤖 Browser-Use Library Version {self.version} ({self.source})')
 
@@ -1163,6 +1170,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		await self.step(step_info)
 
 		if self.history.is_done():
+			self.logger.debug(f'🎯 Task completed after {step_info}')
 			await self.log_completion()
 			if self.register_done_callback:
 				if inspect.iscoroutinefunction(self.register_done_callback):
@@ -1206,6 +1214,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			exit_on_second_int=True,
 		)
 		signal_handler.register()
+
 
 		try:
 			self._log_agent_run()
@@ -1320,6 +1329,21 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			if self.history._output_model_schema is None and self.output_model_schema is not None:
 				self.history._output_model_schema = self.output_model_schema
 
+
+			# --- ADD THIS BLOCK ---
+			final_result = self.history.final_result()
+			print(f"🧩 [Agent Debug] Validating output model with: {final_result}")
+
+			if self.history._output_model_schema is not None:
+				try:
+					validated = self.history._output_model_schema.parse_obj(final_result)
+					print(f"🧩 [Agent Debug] Output model validated successfully.")
+				except ValidationError as e:
+					print(f"🚨 [Agent Debug] Output model validation failed: {e}")
+			else:
+				print("🚨 [Agent Debug] No output_model_schema set, cannot validate output model!")
+
+			# --- END OF ADDED BLOCK ---
 			self.logger.debug('🏁 Agent.run() completed successfully')
 			return self.history
 
@@ -1482,6 +1506,19 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				action_name = next(iter(action_data.keys())) if action_data else 'unknown'
 				action_params = getattr(action, action_name, '')
 				self.logger.info(f'☑️ Executed action {i + 1}/{len(actions)}: {action_name}({action_params})')
+				
+				
+				# NEW DEBUG
+				if hasattr(self, "history") and self.history.model_outputs():
+					last_output = self.history.model_outputs()[-1]
+					if last_output.next_goal and "prepare final JSON" in last_output.next_goal.lower():
+						print(f"🔍 [Agent Debug] Next goal is to prepare final JSON at step {i+1}/{len(actions)}")
+
+				# Also log after executing the done action
+				if action_name == "done":
+					print(f"✅ [Agent Debug] Executed done action at step {i+1}")
+				## END OF NEW DEBUG
+				
 				if results[-1].is_done or results[-1].error or i == len(actions) - 1:
 					break
 

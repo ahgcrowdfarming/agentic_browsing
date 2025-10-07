@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from markdown_pdf import MarkdownPdf, Section
+#from markdown_pdf import MarkdownPdf, Section
 from pydantic import BaseModel, Field
 
 INVALID_FILENAME_ERROR_MESSAGE = 'Error: Invalid filename format. Must be alphanumeric with supported extension.'
@@ -110,25 +110,25 @@ class CsvFile(BaseFile):
 		return 'csv'
 
 
-class PdfFile(BaseFile):
-	"""PDF file implementation"""
+# class PdfFile(BaseFile):
+# 	"""PDF file implementation"""
 
-	@property
-	def extension(self) -> str:
-		return 'pdf'
+# 	@property
+# 	def extension(self) -> str:
+# 		return 'pdf'
 
-	def sync_to_disk_sync(self, path: Path) -> None:
-		file_path = path / self.full_name
-		try:
-			md_pdf = MarkdownPdf()
-			md_pdf.add_section(Section(self.content))
-			md_pdf.save(file_path)
-		except Exception as e:
-			raise FileSystemError(f"Error: Could not write to file '{self.full_name}'. {str(e)}")
+# 	def sync_to_disk_sync(self, path: Path) -> None:
+# 		file_path = path / self.full_name
+# 		try:
+# 			md_pdf = MarkdownPdf()
+# 			md_pdf.add_section(Section(self.content))
+# 			md_pdf.save(file_path)
+# 		except Exception as e:
+# 			raise FileSystemError(f"Error: Could not write to file '{self.full_name}'. {str(e)}")
 
-	async def sync_to_disk(self, path: Path) -> None:
-		with ThreadPoolExecutor() as executor:
-			await asyncio.get_event_loop().run_in_executor(executor, lambda: self.sync_to_disk_sync(path))
+# 	async def sync_to_disk(self, path: Path) -> None:
+# 		with ThreadPoolExecutor() as executor:
+# 			await asyncio.get_event_loop().run_in_executor(executor, lambda: self.sync_to_disk_sync(path))
 
 
 class FileSystemState(BaseModel):
@@ -159,7 +159,7 @@ class FileSystem:
 			'txt': TxtFile,
 			'json': JsonFile,
 			'csv': CsvFile,
-			'pdf': PdfFile,
+			# 'pdf': PdfFile,
 		}
 
 		self.files = {}
@@ -466,8 +466,8 @@ class FileSystem:
 				file_obj = JsonFile(**file_info)
 			elif file_type == 'CsvFile':
 				file_obj = CsvFile(**file_info)
-			elif file_type == 'PdfFile':
-				file_obj = PdfFile(**file_info)
+			# elif file_type == 'PdfFile':
+			# 	file_obj = PdfFile(**file_info)
 			else:
 				# Skip unknown file types
 				continue

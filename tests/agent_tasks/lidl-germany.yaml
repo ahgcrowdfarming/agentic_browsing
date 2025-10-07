@@ -1,0 +1,80 @@
+name: Supermarket Pricing Scrapper
+task: >
+  Go to lidl's germany website, search for the following products:
+  - avocado
+  - clementine
+  - pomegranate
+  - cherry
+  - blueberry
+  - sweet potato
+  - tomato
+  - grape
+  - passion fruit
+  - peach
+  - summer vegetables
+  - mandarin
+  - cow cheese
+  - apple
+  - sheep cheese
+  - persimmon
+  - grapefruit
+  - apricot
+  - artichoke
+  - aubergine
+  - melon
+  - nectarine
+  - potato
+  - red wine
+  - yellow kiwi
+  - banana
+  - satsuma
+  - chickpea
+  - courgette
+  - dragon fruit
+  - guava
+  - honey
+  - pasta
+  - white wine
+  - pear
+  - goat cheese
+  - juice mandarin
+  - lime
+  - plum
+  - rice
+  - table grape
+  - walnut
+  - watermelon
+  - pomegranate
+  - almond
+  - parmesan
+  - pumpkin
+  - black radish
+  - clementine
+  - flat peach
+  - quince
+  - goji berry
+  - asparagus
+  - hot pepper
+  - walnut in shell
+  - fig
+  - pistachio
+  - lychee
+  - onion
+  - shallot
+  - seedless grape
+  - seaweed
+  - cherry tomato
+  - shiitake
+  and return the price/kg of each product in an .xlsx file.
+  This .xlsx file should have the following columns:
+  - Product Name (from the list above)
+  - Product Name within the website
+  - Price per kg
+  - Price per unit
+  - Supermarket Name
+
+  Some items might display prices per unit instead of per kg, the agent must just fill out the price per unit in that case and return NULL for the price per kg.
+judge_context:
+  - The agent must source these prices from the respective websites of Lidl germany, no other sources.
+  - The output must be an .xlsx file with the specified columns and allowing null values in some cells
+max_steps: 10

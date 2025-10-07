@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from typing import Generic, TypeVar, cast
+import datetime
 
 try:
 	from lmnr import Laminar  # type: ignore
@@ -46,6 +47,11 @@ Context = TypeVar('Context')
 T = TypeVar('T', bound=BaseModel)
 
 
+def default_serializer(obj):
+    if isinstance(obj, (datetime.date, datetime.datetime)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+ 
 class Controller(Generic[Context]):
 	def __init__(
 		self,
@@ -1142,6 +1148,9 @@ Explain the content of the page and that the requested information is not availa
 				for key, value in output_dict.items():
 					if isinstance(value, enum.Enum):
 						output_dict[key] = value.value
+
+				# NEW DEBUG
+				print(f"[Agent Debug] Preparing final JSON output in done action: {output_dict}")
 
 				return ActionResult(
 					is_done=True,

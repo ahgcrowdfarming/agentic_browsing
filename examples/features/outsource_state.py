@@ -41,6 +41,7 @@ async def main():
 			page_extraction_llm=ChatOpenAI(model='gpt-4.1-mini'),
 		)
 
+		print(f'=== Iteration {i} ===')
 		done, valid = await agent.take_step()
 		print(f'Step {i}: Done: {done}, Valid: {valid}')
 
