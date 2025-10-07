@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from dotenv import load_dotenv
 
 load_dotenv()
-
+print("Loaded API key:", os.getenv("OPENAI_API_KEY"))
 
 from browser_use import Agent
 from browser_use.browser.profile import BrowserProfile
@@ -26,23 +26,64 @@ async def main():
 	await browser_session.start()
 
 	current_agent = None
-	llm = ChatOpenAI(model='gpt-4.1')
+	llm = ChatOpenAI(model='gpt-4.1-mini', api_key=os.getenv("OPENAI_API_KEY"))
 
-	task1 = 'find todays weather on San Francisco and extract it as json'
-	task2 = 'find todays weather in Zurich and extract it as json'
+	task1 = """
+	Go to lidl's germany website, search for the following products in GERMAN:
+	- clementine
+
+
+	
+	For each product, find: 
+	- Product Name (from the list above in english)
+	- Website Name of the product (in whatever language the website is in)
+	- Price per kg
+	- Price per unit
+	- Supermarket Name
+	- Country
+
+	Guidelines:
+	- You may find product with price per unit, or others with price per kg, or both. Fill out which ever field you find. 
+	- Please avoid prices in discounts, we want the regular price.
+	- Please extract bio/organic/ecological products, if available from the same category. e.g. get BIO apple AND normal apple and extract all info for BOTH whenever there is BIO options. 
+	- If you find a product that is not in the list, please ignore it.
+	- Return a JSON with ALL the products found, with the following structure:
+	```json
+	{
+		"products": [
+			{
+				"name": "avocado",
+				"website_name": "Avocado Bio 400g",
+				"price_per_kg": "3.99",
+				"price_per_unit": "0.99",
+				"supermarket_name": "Lidl"
+				"country": "Germany"
+				"bio": true
+			},
+			{
+				"name": "clementine",
+				"website_name": "Clementine 500g",
+				"price_per_kg": null,
+				"price_per_unit": "1.29",
+				"supermarket_name": "Lidl",
+				"country": "Germany"
+				"bio": false
+			},
+			...
+		]
+	}
+	```
+	"""
 
 	agent1 = Agent(
 		task=task1,
 		browser_session=browser_session,
 		llm=llm,
-	)
-	agent2 = Agent(
-		task=task2,
-		browser_session=browser_session,
-		llm=llm,
+		output_dir="output",
+		product= "avocado"
 	)
 
-	await asyncio.gather(agent1.run(), agent2.run())
+	await asyncio.gather(agent1.run())
 	await browser_session.kill()
 
 
