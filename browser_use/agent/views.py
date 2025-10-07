@@ -426,15 +426,17 @@ class AgentHistoryList(BaseModel, Generic[AgentStructuredOutput]):
 
 	def is_done(self) -> bool:
 		"""Check if the agent is done"""
-		print(f"🧩 [Agent Debug] Checking is_done for all history items (steps: {self.number_of_steps()})")
-		for step_idx, h in enumerate(self.history):
-			for result_idx, r in enumerate(h.result):
-				print(f"    [Agent Debug] Step {step_idx}, Result {result_idx}: is_done={getattr(r, 'is_done', None)}, success={getattr(r, 'success', None)}, error={getattr(r, 'error', None)}")
-				if getattr(r, "is_done", False):
-					print(f"🧩 [Agent Debug] is_done() called, returns: True (step {self.number_of_steps()})")
-					return True
-		print(f"🧩 [Agent Debug] is_done() called, returns: False (step {self.number_of_steps()})")
+		if self.history and len(self.history[-1].result) > 0:
+			last_result = self.history[-1].result[-1]
+			return last_result.is_done is True
+		else:
+			for step_idx, h in enumerate(self.history):
+				for result_idx, r in enumerate(h.result):
+					for result_idx, r in enumerate(h.result):
+						if getattr(r, 'error', False):
+							print(f"🧩 [Agent Debug] Found error in history at Step {step_idx}, Result {result_idx}: error={getattr(r, 'error', None)}")
 		return False
+		
 	
 		#ORIGINAL IS_DONE
 		# if self.history and len(self.history[-1].result) > 0:
@@ -467,6 +469,17 @@ class AgentHistoryList(BaseModel, Generic[AgentStructuredOutput]):
 		# TEST 5 IS_DONE
 		# for h in self.history:
 		# 	for r in h.result:
+		# 		if getattr(r, "is_done", False):
+		# 			print(f"🧩 [Agent Debug] is_done() called, returns: True (step {self.number_of_steps()})")
+		# 			return True
+		# print(f"🧩 [Agent Debug] is_done() called, returns: False (step {self.number_of_steps()})")
+		# return False
+
+		# TEST 6 IS_DONE
+		# print(f"🧩 [Agent Debug] Checking is_done for all history items (steps: {self.number_of_steps()})")
+		# for step_idx, h in enumerate(self.history):
+		# 	for result_idx, r in enumerate(h.result):
+		# 		print(f"    [Agent Debug] Step {step_idx}, Result {result_idx}: is_done={getattr(r, 'is_done', None)}, success={getattr(r, 'success', None)}, error={getattr(r, 'error', None)}")
 		# 		if getattr(r, "is_done", False):
 		# 			print(f"🧩 [Agent Debug] is_done() called, returns: True (step {self.number_of_steps()})")
 		# 			return True
