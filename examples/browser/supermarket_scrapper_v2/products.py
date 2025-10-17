@@ -1,3 +1,22 @@
-PRODUCTS = [
-    "avocado", "banana"]
-    ## "mango", "clementine" ,"grape", "pomegranate", "banana", "clementine", "orange", "mandarin", "blood orange", "lemon", "extra virgin olive oil", "kiwi", "persimmon"
+PRODUCTS = {
+    'apple': ['Red Apple', 'Green Apple', 'Pink Lady Apple'],
+    'orange': ['Navel Orange', 'Valencia Orange', 'Blood Orange'],
+    'mango': ['Mango', 'Honey Mango'],
+    'grape': ['Green Grape', 'Red Grape', 'Black Grape'],
+    'avocado': ['Avocado'],
+    'clementine': ['Clementine'],
+    'tomato': ['Standard Tomato', 'Cherry Tomato', 'Plum Tomato'],
+    'lemon': ['Lemon'],
+    'potato': ['Russet Potato', 'Red Potato', 'Yukon Gold Potato', 'Sweet Potato'],
+    'pomegranate': ['Pomegranate'],
+    'tangerine': ['Tangerine'],
+    'blueberry': ['Blueberry'],
+    'onion': ['Brown Onion', 'Red Onion', 'White Onion', 'Spring Onion'],
+    'blood orange': ['Blood Orange'],
+    'apricot': ['Apricot'],
+    'green pepper (capsicum)': ['Green Pepper'],
+    'peach': ['Peach', 'White Peach', 'Yellow Peach'],
+    'passion fruit': ['Passion Fruit'],
+    'pear': ['Green Pear', 'Red Pear', 'Bosc Pear'],
+    'pumpkin': ['Pumpkin']
+}

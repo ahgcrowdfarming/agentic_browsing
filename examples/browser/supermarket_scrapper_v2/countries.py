@@ -15,22 +15,25 @@ COUNTRIES = {
     #     # Kaufland
     #     # Amazon Fresh Germany (requires Prime membership)
     # },
-    # "France": {
-    #     "Carrefour": "https://www.carrefour.fr",
-    # #     "Intermarché": "https://www.intermarche.com",
-    # #     "LRQDO": "https://laruchequiditoui.fr/fr/assemblies?fullAddress=Paris%2C+France#11/48.8535/2.3484",
-    # #     "La Fourche": "https://lafourche.fr/",
-    # #     "Le Fourgon" : "https://www.lefourgon.com/",
-    # #     "Santafoo": "https://santafoo.fr/",
-    # #     #"Auchan": "https://www.auchan.fr",
-    # #     "Monoprix": "https://courses.monoprix.fr/",
-    # #     "Naturalia": "https://www.naturalia.fr/",
-    # #     "Chronodrive": "https://www.chronodrive.com/",
-    # #     "Mon Marché": "https://www.monmarche.fr",
-    # #     #"Bene Bono": "https://benebono.com/fr",
-    # #     "Neary": "https://www.neary.fr",
-    # #     "Potager City": "https://www.potagercity.fr"
-    # },
+    "France": {
+        "Carrefour": "https://www.carrefour.fr",
+        # "Intermarché": "https://www.intermarche.com", -> blocked
+        # "LRQDO": "https://laruchequiditoui.fr/fr/assemblies?fullAddress=Paris%2C+France#11/48.8535/2.3484",
+        "La Fourche": "https://lafourche.fr/",
+        # "Le Fourgon" : "https://www.lefourgon.com/", -> complex website, no results found
+        # "Santafoo": "https://santafoo.fr/",
+        # "Auchan": "https://www.auchan.fr", -> no online prices
+        "Monoprix": "https://courses.monoprix.fr/",
+        # "Naturalia": "https://www.naturalia.fr/",
+        # "Chronodrive": "https://www.chronodrive.com/",
+        #"Casino": "https://www.casino.fr", -> no online prices
+        "Mon Marché": "https://www.monmarche.fr",
+        "Lidl": "https://www.lidl.fr",
+        "Cora": "https://www.cora.fr",
+        # "Franprix": "https://www.franprix.fr",      
+        # "Neary": "https://www.neary.fr",
+        "Potager City": "https://www.potagercity.fr"
+    },
     
     # "United Kingdom": {
     #     "Tesco": "https://www.tesco.com/groceries/en-GB/",
@@ -45,8 +48,8 @@ COUNTRIES = {
     #     "Iceland": "https://www.iceland.co.uk"
     # },
     
-    "Spain": {
-         "Mercadona": "https://tienda.mercadona.es",
+    # "Spain": {
+    #      "Mercadona": "https://tienda.mercadona.es",
     #     "Carrefour": "https://www.carrefour.es/supermercado",
     #     "Dia": "https://www.dia.es",
     #     # "El Corte Inglés": "https://www.elcorteingles.es/supermercado",
@@ -58,7 +61,7 @@ COUNTRIES = {
     #     # "Freshish": "https://freshis.com/",
     #     # "Alcampo": "https://compraonline.alcampo.es",
     #     # "Eroski": "https://supermercado.eroski.es",
-     },
+    #  },
 
     # "Italy": {
     #     "Coop": "https://www.coop.it",
@@ -78,13 +81,19 @@ COUNTRIES = {
     #     "Grocery Online": "https://groceryonline.se/",
     #     "Coop": "https://www.coop.se/"
     # },
-    # "Austria": {
-    #     "BILLA": "https://shop.billa.at",
-    #     "INTERSPAR": "https://www.interspar.at",
-    #     "Spar": "https://www.spar.at",
-    #     "MPreis": "https://www.mpreis.at/",
-    #     "Gurkel": "https://gurkerl.at/"
-    # }
+    "Austria": {
+        "BILLA": "https://shop.billa.at",
+        "INTERSPAR": "https://www.interspar.at",
+        "Spar": "https://www.spar.at",
+        "MPreis": "https://www.mpreis.at/",
+        "Gurkel": "https://gurkerl.at/",
+        "Penny": "https://www.penny.at/",
+        "Hofer": "https://www.hofer.at/",
+        "Lidl": "https://www.lidl.at/",
+        #"Unimarkt": "https://www.unimarkt.at/",
+        #"Nah&Frisch": "https://www.nahundfrisch.at/",
+        "Spar Gourmet": "https://www.spar.at/gourmet"
+    }
 
 
 }

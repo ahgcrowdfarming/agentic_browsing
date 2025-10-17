@@ -1,6 +1,9 @@
 import os
 import json
 import pandas as pd
+from datetime import date
+from products import PRODUCTS
+
 
 # --- CONFIGURATION ---
 # The name of the folder containing the results.
@@ -34,15 +37,44 @@ def create_excel_report():
                         # The JSON has a 'products' key which contains a list.
                         # We check that it exists and is a list before continuing.
                         if 'products' in data and isinstance(data['products'], list):
-                            # If the product list is not empty, we add its contents.
+                            # If the product list is not empty, we process its contents.
                             if data['products']:
                                 print(f"  -> Processing {len(data['products'])} product(s) from: {filename}")
+                                
+                                # Get the product name from the filename (e.g., 'apples' from 'apples.json')
+                                product_name_from_file = os.path.splitext(filename)[0]
+
+                                # Loop through each product to apply corrections before adding.
+                                for product_dict in data['products']:
+                                    # --- FIX 1: Overwrite 'name' with the filename ---
+                                    # This ensures the 'name' field is always consistent with the source file.
+                                    product_dict['name'] = product_name_from_file
+
+                                    # --- FIX 2: Validate 'subtype' ---
+                                    # If 'subtype' is missing, empty, or not a valid option for the product,
+                                    # default it to the main product name.
+                                    
+                                    # Get the list of valid subtypes, defaulting to an empty list if product is not found.
+                                    valid_subtypes = PRODUCTS.get(product_name_from_file, [])
+                                    
+                                    # Create a lowercase version of the list for case-insensitive matching.
+                                    valid_subtypes_lower = [subtype.lower() for subtype in valid_subtypes]
+
+                                # Check if subtype exists and is valid.
+                                if 'subtype' not in product_dict or not product_dict.get('subtype') or product_dict['subtype'].lower() not in valid_subtypes_lower:
+                                    product_dict['subtype'] = product_name_from_file
+                                
+                                    # --- FIX 3: Add 'scrapped_date' if it's missing ---
+                                    # If the date key doesn't exist or is empty, add today's date.
+                                    if 'scrapped_date' not in product_dict or not product_dict.get('scrapped_date'):
+                                        product_dict['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                                
                                 # 'extend' adds all items from the list to our main list.
                                 all_products_data.extend(data['products'])
                             else:
                                 print(f"  -> Empty file (no products): {filename}")
                         else:
-                             print(f"  ⚠️  Warning: Invalid format or no 'products' key in {filename}")
+                            print(f"  ⚠️  Warning: Invalid format or no 'products' key in {filename}")
 
                 except json.JSONDecodeError:
                     print(f"  🚨 Error: Could not decode JSON in {filename}. The file might be corrupt.")
@@ -58,16 +90,17 @@ def create_excel_report():
     print("Creating data table...")
 
     # We create a pandas DataFrame from the list of dictionaries.
-    # This is the magic of pandas!
     df = pd.DataFrame(all_products_data)
 
     # We reorder the columns to make the table more readable.
     # The script will handle it if any of these columns don't exist in the data.
+    # 'subtype' was added to this list to ensure it appears in the report.
     desired_columns = [
-        'country', 'supermarket_name', 'name', 'website_product_name', 'bio',
-        'price_per_kg', 'estimated_price_per_kg', 'price_per_unit', 'currency',
-        'original_price_info', 'estimation_notes'
-    ]
+     'scrapped_date', 'country', 'supermarket_name', 'name', 'subtype', 'website_product_name', 'bio',
+     'price_per_kg', 'price_per_unit', 'currency',
+     'original_price_info', 'estimation_notes',
+     'model_used', 'run_total_tokens', 'estimated_cost' # <-- ADD THESE
+   ] 
     
     existing_columns = [col for col in desired_columns if col in df.columns]
     df = df[existing_columns]

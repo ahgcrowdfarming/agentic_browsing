@@ -24,12 +24,21 @@ from prompt import PROMPT_TEMPLATE
 from countries import COUNTRIES
 from products import PRODUCTS
 
+TOKEN_PRICING = {
+    'gpt-4o-mini-2024-07-18': {
+        'input': 0.15 / 1_000_000,  # $0.15 per 1 million tokens
+        'output': 0.60 / 1_000_000, # $0.60 per 1 million tokens
+    }
+    # You can add other models here if you use them
+}
+
 load_dotenv()
 print("Loaded API key:", os.getenv("OPENAI_API_KEY") is not None)
 
 # --- Pydantic Models (unchanged) ---
 class Product(BaseModel):
     name: str
+    subtype:str
     website_product_name: Optional[str] = None
     price_per_kg: Optional[float] = None
     price_per_unit: Optional[float] = None
@@ -65,8 +74,50 @@ SECONDS_BETWEEN_TASKS = 1
 OUTPUT_BASE = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUTPUT_BASE, exist_ok=True)
 
+
+def add_agent_cost_to_product_data(final_data, result, llm):
+    """
+    Calculates the total tokens and cost for a run and distributes it
+    across the extracted product dictionaries.
+    """
+    try:
+        model_name = llm.model
+        
+        # The result object contains a summary of all LLM calls made during the run
+        total_prompt_tokens = sum(u.prompt_tokens for u in result.usage_summary)
+        total_completion_tokens = sum(u.completion_tokens for u in result.usage_summary)
+        run_total_tokens = total_prompt_tokens + total_completion_tokens
+        
+        # Calculate the total cost for the run
+        total_cost = 0.0
+        if model_name in TOKEN_PRICING:
+            prices = TOKEN_PRICING[model_name]
+            input_cost = total_prompt_tokens * prices['input']
+            output_cost = total_completion_tokens * prices['output']
+            total_cost = input_cost + output_cost
+        else:
+            print(f"⚠️  [Cost] Warning: Pricing for model '{model_name}' not found. Cost will be 0.")
+
+        # Distribute the cost and add the new fields to each product
+        products = final_data.get('products', [])
+        num_products = len(products)
+        cost_per_product = total_cost / num_products if num_products > 0 else 0
+        
+        for product in products:
+            product['model_used'] = model_name
+            product['run_total_tokens'] = run_total_tokens
+            product['estimated_cost'] = cost_per_product
+            
+        print(f"  💸 [Cost] Run Tokens: {run_total_tokens}, Total Cost: ${total_cost:.6f}, Products Found: {num_products}")
+        
+    except Exception as e:
+        print(f"🚨 [Cost] Error calculating or adding cost data: {e}")
+        
+    return final_data
+
+
 # --- Agent Runner (unchanged, it's perfect) ---
-async def run_agent_with_retry(agent, output_path, max_retries=1):
+async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
     """This function now only contains the retry logic for a single agent run."""
     for attempt in range(max_retries):
         print(f"🔄 [Agent] Attempt {attempt + 1} for {os.path.basename(output_path)}.")
@@ -76,6 +127,8 @@ async def run_agent_with_retry(agent, output_path, max_retries=1):
             if hasattr(result, "structured_output") and result.structured_output:
                 print(f"✅ [Agent] Found structured_output from library for {os.path.basename(output_path)}.")
                 final_data = result.structured_output.model_dump()
+                final_data = add_agent_cost_to_product_data(final_data, result, llm)
+                for product in final_data.get('products', []): product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
                 with open(output_path, "w", encoding="utf-8") as f:
                     json.dump(final_data, f, ensure_ascii=False, indent=2)
                 print(f"   -> Saved results to: {output_path}")
@@ -88,6 +141,8 @@ async def run_agent_with_retry(agent, output_path, max_retries=1):
                     final_data = json.loads(final_text)
                     SupermarketOutput.model_validate(final_data)
                     print(f"🧩 [Agent Debug] Output model validated successfully.")
+                    final_data = add_agent_cost_to_product_data(final_data, result, llm)
+                    for product in final_data.get('products', []): product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
                     with open(output_path, "w", encoding="utf-8") as f:
                         json.dump(final_data, f, ensure_ascii=False, indent=2)
                     print(f"   -> Successfully parsed and saved results to: {output_path}")
@@ -120,7 +175,7 @@ async def run_agent_with_retry(agent, output_path, max_retries=1):
 
 
 # --- NEW: Self-Contained Worker ---
-async def process_supermarket_task(country, supermarket, product, llm, semaphore):
+async def process_supermarket_task(country, supermarket, product, subtypes, llm, semaphore):
     """
     This is a self-contained "worker" function. It handles one single task
     (e.g., "avocado at Lidl in Germany") from start to finish, including
@@ -145,7 +200,7 @@ async def process_supermarket_task(country, supermarket, product, llm, semaphore
             browser_session = BrowserSession(
                 browser_profile=BrowserProfile(
                     # Headless is better for long, unsupervised runs
-                    headless=False,
+                    headless=  False,
                     user_data_dir=None,
                     # minimum_wait_page_load_time=2,  # Increase wait time (if supported)
                     # wait_between_actions=0.5          # Increase action wait (if supported)
@@ -158,6 +213,7 @@ async def process_supermarket_task(country, supermarket, product, llm, semaphore
             prompt = PROMPT_TEMPLATE.format(
                 website_url=COUNTRIES[country][supermarket],
                 product=product,
+                subtypes=subtypes,
                 country=country,
                 supermarket=supermarket
             )
@@ -175,7 +231,7 @@ async def process_supermarket_task(country, supermarket, product, llm, semaphore
             )
             print(f"🚀 [Worker] created agent for {task_id}.")
 
-            await run_agent_with_retry(agent, output_path)
+            await run_agent_with_retry(agent, output_path, llm)
             print(f"✅ [Worker] Agent finished for {task_id}.")
 
         except Exception as e:
@@ -205,18 +261,18 @@ async def main():
     all_jobs = []
     for country, supermarkets in COUNTRIES.items():
         for supermarket in supermarkets:
-            for product in PRODUCTS:
-                all_jobs.append((country, supermarket, product))
+            for product, subtypes in PRODUCTS.items():
+                all_jobs.append((country, supermarket, product, subtypes))
     
     print(f"Found {len(all_jobs)} total jobs to process.")
     
     tasks = []
     for job in all_jobs:
-        country, supermarket, product = job
+        country, supermarket, product, subtypes = job
         
         # Create and schedule the worker task
         task = asyncio.create_task(
-            process_supermarket_task(country, supermarket, product, llm, semaphore)
+            process_supermarket_task(country, supermarket, product, subtypes, llm, semaphore)
         )
         tasks.append(task)
         
