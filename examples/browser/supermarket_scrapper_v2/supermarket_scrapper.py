@@ -48,6 +48,9 @@ class Product(BaseModel):
     supermarket_name: str
     country: str
     bio: bool
+    # model_used: Optional[str] = None
+    # run_total_tokens: Optional[int] = None
+    # estimated_cost: Optional[float] = None
     # packaging_type: Optional[str] = None
     # minimum_order_value: Optional[float] = None
     # product_origin: Optional[str] = None
@@ -77,44 +80,49 @@ os.makedirs(OUTPUT_BASE, exist_ok=True)
 
 def add_agent_cost_to_product_data(final_data, result, llm):
     """
-    Calculates the total tokens and cost for a run and distributes it
-    across the extracted product dictionaries.
+    Calculates the per-product tokens and cost for a run and adds them
+    to the extracted product dictionaries.
     """
     try:
         model_name = llm.model
+        usage = result.usage
         
-        # The result object contains a summary of all LLM calls made during the run
-        total_prompt_tokens = sum(u.prompt_tokens for u in result.usage_summary)
-        total_completion_tokens = sum(u.completion_tokens for u in result.usage_summary)
-        run_total_tokens = total_prompt_tokens + total_completion_tokens
+        # Get the total token counts from the usage object
+        run_total_tokens = usage.total_tokens
         
-        # Calculate the total cost for the run
-        total_cost = 0.0
+        # --- REVERT: Manually calculate total cost ---
+        # We need the prompt and completion tokens for this.
+        total_prompt_tokens = usage.total_prompt_tokens
+        total_completion_tokens = usage.total_completion_tokens
+        
+        run_total_cost = 0.0
         if model_name in TOKEN_PRICING:
             prices = TOKEN_PRICING[model_name]
             input_cost = total_prompt_tokens * prices['input']
             output_cost = total_completion_tokens * prices['output']
-            total_cost = input_cost + output_cost
-        else:
-            print(f"⚠️  [Cost] Warning: Pricing for model '{model_name}' not found. Cost will be 0.")
+            run_total_cost = input_cost + output_cost
+        # --- END OF REVERT ---
 
-        # Distribute the cost and add the new fields to each product
+        # Get the number of products to distribute the cost and tokens
         products = final_data.get('products', [])
         num_products = len(products)
-        cost_per_product = total_cost / num_products if num_products > 0 else 0
         
+        # Calculate per-product values
+        tokens_per_product = run_total_tokens / num_products if num_products > 0 else 0
+        cost_per_product = run_total_cost / num_products if num_products > 0 else 0
+        
+        # Assign the simplified, per-product fields
         for product in products:
             product['model_used'] = model_name
-            product['run_total_tokens'] = run_total_tokens
-            product['estimated_cost'] = cost_per_product
+            product['tokens_used'] = int(tokens_per_product)
+            product['total_cost'] = cost_per_product
             
-        print(f"  💸 [Cost] Run Tokens: {run_total_tokens}, Total Cost: ${total_cost:.6f}, Products Found: {num_products}")
+        print(f"  💸 [Cost] Run Tokens: {run_total_tokens}, Total Cost: ${run_total_cost:.6f}, Products Found: {num_products}")
         
     except Exception as e:
         print(f"🚨 [Cost] Error calculating or adding cost data: {e}")
         
     return final_data
-
 
 # --- Agent Runner (unchanged, it's perfect) ---
 async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
@@ -123,6 +131,14 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
         print(f"🔄 [Agent] Attempt {attempt + 1} for {os.path.basename(output_path)}.")
         try:
             result = await agent.run()
+            usage = result.usage
+            # --- ADD THESE DEBUGGING LINES ---
+            print("\n" + "="*20 + " DEBUGGING USAGE OBJECT " + "="*20)
+            print(f"Usage Object Type: {type(usage)}")
+            print("--- Available Attributes ---")
+            print(dir(usage))
+            print("="*66 + "\n")
+            # --- END OF DEBUGGING LINES ---
 
             if hasattr(result, "structured_output") and result.structured_output:
                 print(f"✅ [Agent] Found structured_output from library for {os.path.basename(output_path)}.")
