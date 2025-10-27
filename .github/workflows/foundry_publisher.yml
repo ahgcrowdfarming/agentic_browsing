@@ -2,12 +2,11 @@ name: Monthly Supermarket Scrape & Publish
 
 on:
   schedule:
-    # 04:00 UTC on the 1st of every month
-    # ≈ 05:00/06:00 Europe/Madrid depending on DST
+    # 04:00 UTC on the 1st of every month (≈ 05:00/06:00 Europe/Madrid)
     - cron: '0 4 1 * *'
   workflow_dispatch: {}
 
-# Prevent overlapping monthly runs
+# avoid overlapping monthly runs
 concurrency:
   group: supermarket-scrape-publish
   cancel-in-progress: false
@@ -16,18 +15,22 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
     permissions:
       contents: read
 
-    # If your code lives in a subfolder (e.g., examples/browser), uncomment:
-    # defaults:
-    #   run:
-    #     working-directory: examples/browser
+    # 👇 make all `run:` commands execute from your nested folder
+    defaults:
+      run:
+        working-directory: examples/browser/supermarket_scrapper_v2
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Show working directory
+        run: |
+          pwd
+          ls -la
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,7 +43,6 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            # fallback if requirements.txt is missing/minimal
             pip install playwright requests pandas
           fi
 
@@ -49,10 +51,10 @@ jobs:
 
       - name: Run pipeline (scrape -> CSV -> Foundry upload)
         env:
-          # Scraper needs this only if you use OpenAI in scraping
+          # only if your scraper needs OpenAI
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
-          # Foundry creds (repository secrets)
+          # Foundry creds (repo secrets)
           FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
           FOUNDRY_DATASET_RID: ${{ secrets.FOUNDRY_DATASET_RID }}
           FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
@@ -68,12 +70,13 @@ jobs:
         run: |
           echo "Tree of output/"
           ls -la output || true
-          ls -la output/json || true
+          # if you still have per-country subfolders, this shows a couple of levels:
+          find output -maxdepth 2 -type d -print | sort
 
       - name: Upload last_run.csv as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: last_run_csv
-          path: output/last_run.csv
+          path: examples/browser/supermarket_scrapper_v2/output/last_run.csv
           if-no-files-found: warn
