@@ -1,57 +1,64 @@
-import os, math, json, logging
-import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+# foundry.py
+from __future__ import annotations
+import os
+import time
+import requests
+from typing import Optional
 
-class FoundryError(Exception): pass
+class FoundryUploader:
+    """
+    Minimal client for Foundry's append-only file upload:
+      POST https://{host}/api/v1/datasets/{rid}/files:upload?filePath=...
+    Env vars required:
+      - FOUNDRY_HOST (e.g. foundry.mycompany.com)
+      - FOUNDRY_DATASET_RID (e.g. ri.dataset.main.xxxxx)
+      - FOUNDRY_TOKEN (Bearer token)
+    Optional:
+      - FOUNDRY_FOLDER_PREFIX (default: 'scrapes')
+    """
+    def __init__(
+        self,
+        host: Optional[str] = None,
+        dataset_rid: Optional[str] = None,
+        token: Optional[str] = None,
+        folder_prefix: Optional[str] = None,
+        timeout_seconds: int = 120,
+    ):
+        self.host = (host or os.environ.get("FOUNDRY_HOST", "")).strip().rstrip("/")
+        self.dataset_rid = (dataset_rid or os.environ.get("FOUNDRY_DATASET_RID", "")).strip()
+        self.token = (token or os.environ.get("FOUNDRY_TOKEN", "")).strip()
+        self.folder_prefix = (folder_prefix or os.environ.get("FOUNDRY_FOLDER_PREFIX", "scrapes")).strip("/")
+        self.timeout_seconds = timeout_seconds
 
-class FoundryClient:
-    def __init__(self, base_url: str, token: str, dataset_rid: str|None=None, endpoint_path: str|None=None):
-        self.base_url = base_url.rstrip("/")
-        self.token = token
-        self.dataset_rid = dataset_rid
-        self.endpoint_path = endpoint_path
+        if not self.host or not self.dataset_rid or not self.token:
+            raise ValueError("Missing FOUNDRY_HOST, FOUNDRY_DATASET_RID, or FOUNDRY_TOKEN")
 
-    def _headers(self):
+    def _headers(self) -> dict:
         return {
             "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json",
+            "Content-Type": "application/octet-stream",
         }
 
-    @retry(
-        retry=retry_if_exception_type(httpx.HTTPError),
-        wait=wait_exponential(multiplier=1, min=1, max=20),
-        stop=stop_after_attempt(5),
-        reraise=True,
-    )
-    def post_json(self, path: str, payload: dict|list):
-        url = f"{self.base_url}{path}"
-        with httpx.Client(timeout=60) as client:
-            r = client.post(url, headers=self._headers(), json=payload)
-            if r.status_code >= 300:
-                raise FoundryError(f"POST {url} -> {r.status_code}: {r.text[:500]}")
-            return r.json() if r.headers.get("content-type","").startswith("application/json") else r.text
+    def unique_dataset_path(self, filename: str) -> str:
+        """
+        Build an append-only path: prefix/year=YYYY/month=MM/day=DD/<timestamp>_filename
+        Prevents overwrites and plays nicely with partitioned views.
+        """
+        y = time.strftime("%Y")
+        m = time.strftime("%m")
+        d = time.strftime("%d")
+        ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        return f"{self.folder_prefix}/year={y}/month={m}/day={d}/{ts}_{filename}"
 
-def chunk(iterable, size):
-    for i in range(0, len(iterable), size):
-        yield iterable[i:i+size]
-
-def post_records(fc: FoundryClient, records: list[dict], batch_size: int = 500):
-    """
-    Two common patterns:
-    1) Dataset append endpoint: e.g., /api/datasets/{rid}/append
-       payload: {"records":[...]}
-    2) Custom endpoint: fc.endpoint_path that accepts the list or an object.
-
-    Adjust the path/payload below to your actual Foundry API.
-    """
-    if fc.endpoint_path:
-        for part in chunk(records, batch_size):
-            logging.info(f"Posting {len(part)} records to {fc.endpoint_path}")
-            fc.post_json(fc.endpoint_path, part)  # or {"records": part}
-    elif fc.dataset_rid:
-        path = f"/api/datasets/{fc.dataset_rid}/append"
-        for part in chunk(records, batch_size):
-            logging.info(f"Appending {len(part)} records to dataset {fc.dataset_rid}")
-            fc.post_json(path, {"records": part})
-    else:
-        raise FoundryError("Must set either endpoint_path or dataset_rid")
+    def upload_bytes(self, data: bytes, file_path_in_dataset: str):
+        url = f"https://{self.host}/api/v1/datasets/{self.dataset_rid}/files:upload"
+        resp = requests.post(
+            url,
+            params={"filePath": file_path_in_dataset},
+            data=data,
+            headers=self._headers(),
+            timeout=self.timeout_seconds,
+        )
+        if resp.status_code >= 300:
+            raise RuntimeError(f"Foundry upload failed {resp.status_code}: {resp.text[:500]}")
+        return resp

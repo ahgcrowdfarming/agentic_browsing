@@ -1,0 +1,7 @@
+browser_use==0.9.1
+imgcat==0.6.0
+openai==2.6.1
+pandas==2.3.3
+pydantic==2.12.3
+python-dotenv==1.2.1
+Requests==2.32.5

@@ -191,7 +191,7 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
 
 
 # --- NEW: Self-Contained Worker ---
-async def process_supermarket_task(country, supermarket, product, subtypes, llm, semaphore):
+async def process_supermarket_task(country, supermarket, product, subtypes, llm, semaphore, output_dir=OUTPUT_BASE):
     """
     This is a self-contained "worker" function. It handles one single task
     (e.g., "avocado at Lidl in Germany") from start to finish, including
@@ -206,9 +206,10 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, f"{product}.json")
 
-        if os.path.exists(output_path):
-            print(f"⏭️  [Worker] Skipping {task_id}, output file already exists.")
-            return
+        # LOCAL TESTING: Skip the checkpointing to force re-runs
+        # if os.path.exists(output_path):
+        #     print(f"⏭️  [Worker] Skipping {task_id}, output file already exists.")
+        #     return
 
         browser_session = None
         try:
