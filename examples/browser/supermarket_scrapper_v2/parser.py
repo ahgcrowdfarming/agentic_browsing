@@ -98,8 +98,7 @@ def create_excel_report():
     desired_columns = [
      'scrapped_date', 'country', 'supermarket_name', 'name', 'subtype', 'website_product_name', 'bio',
      'price_per_kg', 'price_per_unit', 'currency',
-     'original_price_info', 'estimation_notes',
-     'model_used', 'run_total_tokens', 'estimated_cost' # <-- ADD THESE
+     'original_price_info', 'estimation_notes', 'model_used','tokens_used', 'total_cost'
    ] 
     
     existing_columns = [col for col in desired_columns if col in df.columns]
