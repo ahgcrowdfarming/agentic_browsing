@@ -1,5 +1,7 @@
 # foundry_publish.py
 from __future__ import annotations
+import asyncio
+import inspect
 import os
 import json
 import csv
@@ -27,7 +29,10 @@ DESIRED_COLUMNS = [
 # --- SCRAPER RUN ---
 def run_scraper_step():
     print("[publisher] launching scraper to refresh JSONs...")
-    run_scraper()  # type: ignore # runs supermarket_scrapper.main() and writes JSONs to output/
+    if inspect.iscoroutinefunction(run_scraper):
+        asyncio.run(run_scraper())  # ✅ actually executes the async code
+    else:
+        run_scraper() # type: ignore
     print("[publisher] scraper run completed.\n")
 
 # --- PARSING ---
@@ -101,6 +106,11 @@ def main():
     rows = load_product_records()
     if not rows:
         print("[publisher] no product records found; nothing to upload.")
+        # write a tiny breadcrumb CSV so we can inspect in artifacts
+        header = "note\n"
+        (OUTPUT_DIR / "last_run.csv").write_text(header + "no_rows_found\n", encoding="utf-8")
+        print(f"[publisher] wrote EMPTY breadcrumb CSV: {(OUTPUT_DIR / 'last_run.csv').resolve()}")
+        print("[publisher] skipping Foundry upload due to 0 rows.")
         return
 
     headers = compute_headers(rows)
