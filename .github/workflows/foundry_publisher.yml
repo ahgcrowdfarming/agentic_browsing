@@ -1,0 +1,79 @@
+name: Monthly Supermarket Scrape & Publish
+
+on:
+  schedule:
+    # 04:00 UTC on the 1st of every month
+    # ≈ 05:00/06:00 Europe/Madrid depending on DST
+    - cron: '0 4 1 * *'
+  workflow_dispatch: {}
+
+# Prevent overlapping monthly runs
+concurrency:
+  group: supermarket-scrape-publish
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+
+    # If your code lives in a subfolder (e.g., examples/browser), uncomment:
+    # defaults:
+    #   run:
+    #     working-directory: examples/browser
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python deps
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            # fallback if requirements.txt is missing/minimal
+            pip install playwright requests pandas
+          fi
+
+      - name: Install Playwright browsers & OS deps
+        run: python -m playwright install --with-deps
+
+      - name: Run pipeline (scrape -> CSV -> Foundry upload)
+        env:
+          # Scraper needs this only if you use OpenAI in scraping
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+          # Foundry creds (repository secrets)
+          FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
+          FOUNDRY_DATASET_RID: ${{ secrets.FOUNDRY_DATASET_RID }}
+          FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
+
+          # Optional repo variables (not secrets)
+          FOUNDRY_FOLDER_PREFIX: ${{ vars.FOUNDRY_FOLDER_PREFIX }}
+          CSV_FILENAME: ${{ vars.CSV_FILENAME }}
+        run: |
+          python foundry_publish.py
+
+      - name: Show outputs
+        if: always()
+        run: |
+          echo "Tree of output/"
+          ls -la output || true
+          ls -la output/json || true
+
+      - name: Upload last_run.csv as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: last_run_csv
+          path: output/last_run.csv
+          if-no-files-found: warn
