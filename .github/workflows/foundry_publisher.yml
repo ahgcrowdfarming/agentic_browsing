@@ -1,0 +1,7 @@
+- name: Run full scrape + publish
+  env:
+    FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
+    FOUNDRY_DATASET_RID: ${{ secrets.FOUNDRY_DATASET_RID }}
+    FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  run: python foundry_publish.py
