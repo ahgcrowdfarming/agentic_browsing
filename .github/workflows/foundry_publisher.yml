@@ -49,6 +49,21 @@ jobs:
       - name: Install Playwright browsers & OS deps
         run: python -m playwright install --with-deps
 
+      - name: Prepare CI runtime & profile dir
+        # create XDG_RUNTIME_DIR and a writable browser profile location for CI
+        run: |
+          echo "XDG_RUNTIME_DIR=/tmp/runtime-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          mkdir -p "/tmp/runtime-$GITHUB_RUN_ID" || true
+          echo "BROWSER_USER_DATA_DIR=$GITHUB_WORKSPACE/.browser_profile" >> $GITHUB_ENV
+          mkdir -p "$GITHUB_WORKSPACE/.browser_profile" || true
+          echo "Prepared runtime dir and browser profile dir"
+      - name: Debug env (sanity check)
+        run: |
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+          echo "BROWSER_USER_DATA_DIR=$BROWSER_USER_DATA_DIR"
+          python -V
+          pip show playwright || true
+
       - name: Run pipeline (scrape -> CSV -> Foundry upload)
         env:
           # only if your scraper needs OpenAI
@@ -62,7 +77,14 @@ jobs:
           # Optional repo variables (not secrets)
           FOUNDRY_FOLDER_PREFIX: ${{ vars.FOUNDRY_FOLDER_PREFIX }}
           CSV_FILENAME: ${{ vars.CSV_FILENAME }}
+
+          # CI browser settings (created above)
+          BROWSER_USER_DATA_DIR: ${{ env.BROWSER_USER_DATA_DIR }}
+          # Optional: set BROWSER_EXECUTABLE_PATH if you have a custom browser binary in CI
+          # BROWSER_EXECUTABLE_PATH: ${{ vars.BROWSER_EXECUTABLE_PATH }}
         run: |
+          # Ensure runtime dir env is exported in this shell as well
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$GITHUB_RUN_ID}"
           python foundry_publish.py
 
       - name: Show outputs
@@ -71,7 +93,7 @@ jobs:
           echo "Tree of output/"
           ls -la output || true
           # if you still have per-country subfolders, this shows a couple of levels:
-          find output -maxdepth 2 -type d -print | sort
+          find output -maxdepth 2 -type d -print | sort || true
 
       - name: Upload last_run.csv as artifact
         if: always()
@@ -79,4 +101,30 @@ jobs:
         with:
           name: last_run_csv
           path: examples/browser/supermarket_scrapper_v2/output/last_run.csv
+          if-no-files-found: warn
+
+      - name: Upload full output folder as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-output
+          path: examples/browser/supermarket_scrapper_v2/output
+          if-no-files-found: warn
+
+      - name: Upload browser profile for debugging
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-profile
+          path: ${{ github.workspace }}/.browser_profile
+          if-no-files-found: warn
+
+      - name: Upload Playwright traces / logs (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-logs
+          path: |
+            examples/browser/supermarket_scrapper_v2/playwright-logs
+            examples/browser/supermarket_scrapper_v2/*.log
           if-no-files-found: warn

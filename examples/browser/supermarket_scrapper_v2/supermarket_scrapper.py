@@ -219,6 +219,13 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
                     # Headless is better for long, unsupervised runs
                     headless=  True,
                     user_data_dir=None,
+                    args = [
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--single-process",
+                    ],
                     # minimum_wait_page_load_time=2,  # Increase wait time (if supported)
                     # wait_between_actions=0.5          # Increase action wait (if supported)
                 )
