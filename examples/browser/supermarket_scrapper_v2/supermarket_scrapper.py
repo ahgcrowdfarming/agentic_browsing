@@ -7,6 +7,7 @@ import time
 from typing import List, Optional
 import datetime
 from datetime import date
+import re
 
 # --- Setup and Imports ---
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -124,6 +125,58 @@ def add_agent_cost_to_product_data(final_data, result, llm):
         
     return final_data
 
+# ID Generator: build _id for each product based on output_path and product fields ---
+def _build_product_id_from_output(output_path: str, product: dict) -> str:
+    """
+    Build id as: country_supermarket_product_priceperkilo_day_month_year
+    - priceperkilo uses product['price_per_kg'] if available, formatted as two decimals and dots replaced with underscores
+    - date is taken from product['scrapped_date'] if present (DD/MM/YYYY), otherwise today
+    """
+    # extract country, supermarket, filename from output_path
+    parts = os.path.normpath(output_path).split(os.sep)
+    country = supermarket = product_fname = "unknown"
+    if len(parts) >= 3:
+        product_fname = parts[-1]
+        supermarket = parts[-2]
+        country = parts[-3]
+    # product name fallback
+    prod_name = product.get("name") or os.path.splitext(product_fname)[0] or "unknown"
+
+    # price_per_kg normalization
+    price = product.get("price_per_kg")
+    if isinstance(price, (int, float)):
+        price_str = f"{price:.2f}"
+    else:
+        price_str = "unknown"
+
+    price_str = price_str.replace(".", "_")
+
+    # date normalization: expect dd/mm/YYYY
+    date_str = product.get("scrapped_date") or date.today().strftime("%d/%m/%Y")
+    try:
+        d, m, y = re.split(r"[\/\-\.]", date_str)[:3]
+    except Exception:
+        d, m, y = date.today().strftime("%d"), date.today().strftime("%m"), date.today().strftime("%Y")
+
+    # sanitize parts (lowercase, keep alnum, replace other chars with '-')
+    def _sanitize(s: str) -> str:
+        s = str(s)
+        s = s.strip()
+        s = re.sub(r"[^A-Za-z0-9]+", "-", s)
+        return s.strip("-").lower() or "unknown"
+
+    id_parts = [
+        _sanitize(country),
+        _sanitize(supermarket),
+        _sanitize(prod_name),
+        _sanitize(price_str),
+        _sanitize(d),
+        _sanitize(m),
+        _sanitize(y),
+    ]
+    return "_".join(id_parts)
+
+
 # --- Agent Runner (unchanged, it's perfect) ---
 async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
     """This function now only contains the retry logic for a single agent run."""
@@ -144,7 +197,9 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
                 print(f"✅ [Agent] Found structured_output from library for {os.path.basename(output_path)}.")
                 final_data = result.structured_output.model_dump()
                 final_data = add_agent_cost_to_product_data(final_data, result, llm)
-                for product in final_data.get('products', []): product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                for product in final_data.get('products', []):
+                    product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                    product['_id'] = _build_product_id_from_output(output_path, product)
                 with open(output_path, "w", encoding="utf-8") as f:
                     json.dump(final_data, f, ensure_ascii=False, indent=2)
                 print(f"   -> Saved results to: {output_path}")
@@ -158,7 +213,9 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
                     SupermarketOutput.model_validate(final_data)
                     print(f"🧩 [Agent Debug] Output model validated successfully.")
                     final_data = add_agent_cost_to_product_data(final_data, result, llm)
-                    for product in final_data.get('products', []): product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                    for product in final_data.get('products', []):
+                        product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                        product['_id'] = _build_product_id_from_output(output_path, product)
                     with open(output_path, "w", encoding="utf-8") as f:
                         json.dump(final_data, f, ensure_ascii=False, indent=2)
                     print(f"   -> Successfully parsed and saved results to: {output_path}")
@@ -207,9 +264,9 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
         output_path = os.path.join(output_dir, f"{product}.json")
 
         # LOCAL TESTING: Skip the checkpointing to force re-runs
-        # if os.path.exists(output_path):
-        #     print(f"⏭️  [Worker] Skipping {task_id}, output file already exists.")
-        #     return
+        if os.path.exists(output_path):
+            print(f"⏭️  [Worker] Skipping {task_id}, output file already exists.")
+            return
 
         browser_session = None
         try:
@@ -219,12 +276,12 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
                     # Headless is better for long, unsupervised runs
                     headless=  True,
                     user_data_dir=None,
-                    args = [
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--single-process",
+                    args=[
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        # removed "--single-process" (causes "Cannot use V8 Proxy resolver in single process mode" crashes)
                     ],
                     # minimum_wait_page_load_time=2,  # Increase wait time (if supported)
                     # wait_between_actions=0.5          # Increase action wait (if supported)

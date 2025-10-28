@@ -4,6 +4,28 @@ import os
 import time
 import requests
 from typing import Optional
+from urllib.parse import urlparse, urljoin
+
+
+def _build_foundry_url(host: str, path: str) -> str:
+    """
+    Ensure host has a scheme and build a proper absolute URL for requests.
+    Accepts host values like "crowdfarming.palantirfoundry.com" or "https://crowdfarming..."
+    """
+    if not host:
+        raise ValueError("Foundry host is empty. Set FOUNDRY_HOST env var.")
+    host = host.strip()
+    # if user mistakenly passed something like 'https' or '/crowdfarming...', normalize it
+    if host.startswith("http:/") and not host.startswith("http://"):
+        host = host.replace("http:/", "http://", 1)
+    if host.startswith("https:/") and not host.startswith("https://"):
+        host = host.replace("https:/", "https://", 1)
+    parsed = urlparse(host)
+    if not parsed.scheme:
+        host = "https://" + host.lstrip("/")
+    # join and ensure no duplicate slashes
+    return urljoin(host if host.endswith("/") else host + "/", path.lstrip("/"))
+
 
 class FoundryUploader:
     """
@@ -51,7 +73,9 @@ class FoundryUploader:
         return f"{self.folder_prefix}/year={y}/month={m}/day={d}/{ts}_{filename}"
 
     def upload_bytes(self, data: bytes, file_path_in_dataset: str):
-        url = f"https://{self.host}/api/v1/datasets/{self.dataset_rid}/files:upload"
+        dataset_path = f"https://{self.host}/api/v1/datasets/{self.dataset_rid}/files:upload"
+        url = _build_foundry_url(self.host, dataset_path)
+        print(f"Uploading to Foundry URL: {url}")
         resp = requests.post(
             url,
             params={"filePath": file_path_in_dataset},
