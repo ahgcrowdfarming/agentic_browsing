@@ -70,7 +70,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
 
-            - name: Run pipeline (scrape -> CSV -> Foundry upload)
+      - name: Run pipeline (scrape -> CSV -> Foundry upload)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
@@ -97,7 +97,6 @@ jobs:
           curl -sS --max-time 20 -w "\nHTTP %{http_code}\n" https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY" -o /dev/null || true
           # Run under a proper virtual display at 1080p:
           xvfb-run -a -s "-screen 0 1920x1080x24" python foundry_publish.py
-
 
       - name: Show outputs
         if: always()
