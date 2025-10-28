@@ -69,24 +69,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
-
+          
       - name: Run pipeline (scrape -> CSV -> Foundry upload)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
           FOUNDRY_DATASET_RID: ${{ secrets.FOUNDRY_DATASET_RID }}
           FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
-          FOUNDRY_FOLDER_PREFIX: ${{ vars.FOUNDRY_FOLDER_PREFIX }}
-          CSV_FILENAME: ${{ vars.CSV_FILENAME }}
+
+          # ✅ Add these ↓↓↓
+          PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          PROXY_SERVER: ${{ secrets.PROXY_SERVER }}
+          BROWSER_USER_AGENT: ${{ vars.BROWSER_USER_AGENT }}
+          BROWSER_LANG: "en-US"
+          MAX_PROXY_ROTATIONS: 2
+
+          # optional but recommended
           BROWSER_USER_DATA_DIR: ${{ env.BROWSER_USER_DATA_DIR }}
-          # Optional debugging:
           DEBUG: pw:api
-          # Optional proxy vars (only set these if you have a proxy; otherwise leave them absent)
-          # HTTP_PROXY: ${{ secrets.HTTP_PROXY }}
-          # HTTPS_PROXY: ${{ secrets.HTTPS_PROXY }}
-          # NO_PROXY: ${{ secrets.NO_PROXY }}
-          # PROXY_SERVER: ${{ secrets.PROXY_SERVER }}   # e.g. http://user:pass@host:port
-          # BROWSER_USER_AGENT: ${{ vars.BROWSER_USER_AGENT }} # if you want to force a UA
         run: |
           set -euxo pipefail
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$GITHUB_RUN_ID}"

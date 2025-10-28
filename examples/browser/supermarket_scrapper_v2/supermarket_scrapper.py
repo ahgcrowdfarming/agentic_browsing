@@ -18,6 +18,7 @@ from browser_use.browser.profile import BrowserProfile
 from browser_use.browser.session import BrowserSession
 from browser_use.llm import ChatOpenAI
 from browser_use.llm.exceptions import ModelProviderError
+from network_strategy import base_browser_args 
 from openai import OpenAI
 
 # Import Agent Prompt Template and Supermarket/Country lists
@@ -276,19 +277,13 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
                     # Headless is better for long, unsupervised runs
                     headless=False,
                     user_data_dir=os.environ.get("BROWSER_USER_DATA_DIR") or None,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                        # You can add more flags via env without changing code:
-                        # They’ll be appended below.
-                    ] + (os.environ.get("BROWSER_EXTRA_ARGS", "").split() if os.environ.get("BROWSER_EXTRA_ARGS") else [])
+                    args=base_browser_args(country)
                 )
             )
             
             print(f"DISPLAY={os.environ.get('DISPLAY')}")
             print(f"BROWSER_USER_DATA_DIR={os.environ.get('BROWSER_USER_DATA_DIR')}")
+            print(f"UA prefix: {(os.environ.get('BROWSER_USER_AGENT') or '')[:50]}")
             await browser_session.start()
             print(f"✅ [Worker] Browser started for task: {task_id}")
 
