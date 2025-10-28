@@ -217,7 +217,7 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
             browser_session = BrowserSession(
                 browser_profile=BrowserProfile(
                     # Headless is better for long, unsupervised runs
-                    headless=  False,
+                    headless=  True,
                     user_data_dir=None,
                     # minimum_wait_page_load_time=2,  # Increase wait time (if supported)
                     # wait_between_actions=0.5          # Increase action wait (if supported)
