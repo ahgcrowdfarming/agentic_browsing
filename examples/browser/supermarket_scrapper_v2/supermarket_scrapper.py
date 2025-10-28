@@ -274,19 +274,21 @@ async def process_supermarket_task(country, supermarket, product, subtypes, llm,
             browser_session = BrowserSession(
                 browser_profile=BrowserProfile(
                     # Headless is better for long, unsupervised runs
-                    headless=  False,
-                    user_data_dir=None,
+                    headless=False,
+                    user_data_dir=os.environ.get("BROWSER_USER_DATA_DIR") or None,
                     args=[
                         "--no-sandbox",
                         "--disable-setuid-sandbox",
                         "--disable-dev-shm-usage",
                         "--disable-gpu",
-                        # removed "--single-process" (causes "Cannot use V8 Proxy resolver in single process mode" crashes)
-                    ],
-                    # minimum_wait_page_load_time=2,  # Increase wait time (if supported)
-                    # wait_between_actions=0.5          # Increase action wait (if supported)
+                        # You can add more flags via env without changing code:
+                        # They’ll be appended below.
+                    ] + (os.environ.get("BROWSER_EXTRA_ARGS", "").split() if os.environ.get("BROWSER_EXTRA_ARGS") else [])
                 )
             )
+            
+            print(f"DISPLAY={os.environ.get('DISPLAY')}")
+            print(f"BROWSER_USER_DATA_DIR={os.environ.get('BROWSER_USER_DATA_DIR')}")
             await browser_session.start()
             print(f"✅ [Worker] Browser started for task: {task_id}")
 

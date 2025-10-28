@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Install Playwright browsers & OS deps
-        run: python -m playwright install --with-deps
+        run: python -m playwright install --with-deps chromium
 
       - name: Prepare CI runtime & profile dir
         # create XDG_RUNTIME_DIR and a writable browser profile location for CI
@@ -57,6 +57,7 @@ jobs:
           echo "BROWSER_USER_DATA_DIR=$GITHUB_WORKSPACE/.browser_profile" >> $GITHUB_ENV
           mkdir -p "$GITHUB_WORKSPACE/.browser_profile" || true
           echo "Prepared runtime dir and browser profile dir"
+
       - name: Debug env (sanity check)
         run: |
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
@@ -64,28 +65,25 @@ jobs:
           python -V
           pip show playwright || true
 
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
       - name: Run pipeline (scrape -> CSV -> Foundry upload)
         env:
-          # only if your scraper needs OpenAI
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-          # Foundry creds (repo secrets)
           FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
           FOUNDRY_DATASET_RID: ${{ secrets.FOUNDRY_DATASET_RID }}
           FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
-
-          # Optional repo variables (not secrets)
           FOUNDRY_FOLDER_PREFIX: ${{ vars.FOUNDRY_FOLDER_PREFIX }}
           CSV_FILENAME: ${{ vars.CSV_FILENAME }}
-
-          # CI browser settings (created above)
           BROWSER_USER_DATA_DIR: ${{ env.BROWSER_USER_DATA_DIR }}
-          # Optional: set BROWSER_EXECUTABLE_PATH if you have a custom browser binary in CI
-          # BROWSER_EXECUTABLE_PATH: ${{ vars.BROWSER_EXECUTABLE_PATH }}
+          # Optional: give yourself a way to tweak flags without code changes
+          BROWSER_EXTRA_ARGS: "--no-sandbox --disable-dev-shm-usage --disable-gpu"
         run: |
-          # Ensure runtime dir env is exported in this shell as well
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$GITHUB_RUN_ID}"
-          python foundry_publish.py
+          xvfb-run -a python foundry_publish.py
 
       - name: Show outputs
         if: always()
