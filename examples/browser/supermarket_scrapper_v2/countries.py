@@ -32,7 +32,7 @@ COUNTRIES = {
         # "Cora": "https://www.cora.fr", -> redirects to carrefour
         # "Franprix": "https://www.franprix.fr",      
         # "Neary": "https://www.neary.fr",
-        "Potager City": "https://www.potagercity.fr"
+        "Potager City": "https://www.potagercity.fr" #no se si eliminar
     },
     
     # "United Kingdom": {
@@ -92,7 +92,7 @@ COUNTRIES = {
         "Lidl": "https://www.lidl.at/",
         #"Unimarkt": "https://www.unimarkt.at/",
         #"Nah&Frisch": "https://www.nahundfrisch.at/",
-        "Spar Gourmet": "https://www.spar.at/gourmet"
+        #"Spar Gourmet": "https://www.spar.at/gourmet"
     }
 
 

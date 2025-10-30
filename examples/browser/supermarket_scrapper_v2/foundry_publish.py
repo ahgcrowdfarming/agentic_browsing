@@ -88,9 +88,13 @@ def load_product_records() -> List[Dict[str, Any]]:
                 from datetime import date
                 r["scrapped_date"] = date.today().strftime("%Y-%m-%d")
             
+            # FIX 4: Ensure supermarket name matches directory structure
+            if not r.get("supermarket_name") or r["supermarket_name"].lower() != supermarket.lower():
+                print(f"[fix] Correcting supermarket name from '{r.get('supermarket_name', 'MISSING')}' to '{supermarket}' in {jf}")
+                r["supermarket_name"] = supermarket
+            
             # Add standard fields
             r.setdefault("country", country)
-            r.setdefault("supermarket_name", supermarket)
             
             rows.append(clean_nulls(r))
     return rows

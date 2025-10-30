@@ -41,6 +41,10 @@ def create_excel_report():
                             if data['products']:
                                 print(f"  -> Processing {len(data['products'])} product(s) from: {filename}")
                                 
+                                # Get directory structure components
+                                path_parts = os.path.normpath(root).split(os.sep)
+                                supermarket_name = path_parts[-1] if len(path_parts) >= 2 else None
+                                
                                 # Get the product name from the filename (e.g., 'apples' from 'apples.json')
                                 product_name_from_file = os.path.splitext(filename)[0]
 
@@ -49,6 +53,14 @@ def create_excel_report():
                                     # --- FIX 1: Overwrite 'name' with the filename ---
                                     # This ensures the 'name' field is always consistent with the source file.
                                     product_dict['name'] = product_name_from_file
+                                    
+                                    # --- NEW FIX: Ensure supermarket_name matches directory structure ---
+                                    if supermarket_name and (
+                                        'supermarket_name' not in product_dict or 
+                                        product_dict.get('supermarket_name', '').lower() != supermarket_name.lower()
+                                    ):
+                                        print(f"  📝 Correcting supermarket name from '{product_dict.get('supermarket_name', 'MISSING')}' to '{supermarket_name}'")
+                                        product_dict['supermarket_name'] = supermarket_name
 
                                     # --- FIX 2: Validate 'subtype' ---
                                     # If 'subtype' is missing, empty, or not a valid option for the product,

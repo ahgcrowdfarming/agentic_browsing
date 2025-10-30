@@ -5,9 +5,11 @@ import tempfile
 import json
 import time
 from typing import List, Optional
+from urllib.parse import urlparse
 import datetime
 from datetime import date
 import re
+import glob
 
 # --- Setup and Imports ---
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -21,8 +23,8 @@ from browser_use.llm.exceptions import ModelProviderError
 from network_strategy import base_browser_args 
 from openai import OpenAI
 
-# Import Agent Prompt Template and Supermarket/Country lists
-from prompt import PROMPT_TEMPLATE
+# Import Agent Prompts and Supermarket/Country lists
+from prompts import PROMPT_FIRST_SUPERMARKET_PRODUCT, PROMPT_REST_SUPERMARKET_PRODUCTS
 from countries import COUNTRIES
 from products import PRODUCTS
 
@@ -70,7 +72,7 @@ class SupermarketOutput(BaseModel):
 # --- SCRIPT CONTROLS ---
 # The number of parallel browser instances to run.
 # Start with 2 or 3 to be safe. Increase if your machine and API limits can handle it.
-MAX_PARALLEL_BROWSERS = 3
+MAX_PARALLEL_BROWSERS = 1
 
 # The number of seconds to wait between starting each new task.
 # This is crucial for respecting Tokens-Per-Minute (TPM) limits. 5-10 seconds is a good start.
@@ -208,6 +210,41 @@ def add_partition_columns(data_dict: dict) -> dict:
     
     return result
 
+
+def _clean_chrome_session_files(user_data_dir: str) -> list:
+    """Safely remove Chromium session/tab files that cause Chrome to restore previous tabs.
+    This intentionally avoids deleting cookies or preferences. It targets filenames
+    like 'Current Session', 'Current Tabs', 'Last Session', 'Last Tabs', and
+    similar session/tab dumps found under profile directories (e.g. 'Default').
+
+    Returns list of removed file paths.
+    """
+    removed = []
+    try:
+        # Walk the user_data_dir looking for session/tab files in any profile subfolder
+        for root, dirs, files in os.walk(user_data_dir):
+            for fname in files:
+                lname = fname.lower()
+                # Target common Chromium session/tab filenames
+                if (
+                    'current session' in lname
+                    or 'current tabs' in lname
+                    or 'last session' in lname
+                    or 'last tabs' in lname
+                    or re.match(r'session_\d+', lname)
+                    or re.match(r'tabs_\d+', lname)
+                ):
+                    path = os.path.join(root, fname)
+                    try:
+                        os.remove(path)
+                        removed.append(path)
+                    except Exception:
+                        # best-effort; continue
+                        print(f"⚠️ [Browser] Could not remove session file {path}")
+    except Exception as e:
+        print(f"⚠️ [Browser] Error while cleaning session files: {e}")
+    return removed
+
 # --- Agent Runner (unchanged, it's perfect) ---
 async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
     """This function now only contains the retry logic for a single agent run."""
@@ -287,117 +324,265 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
 
 
 # --- NEW: Self-Contained Worker ---
-async def process_supermarket_task(country, supermarket, product, subtypes, llm, semaphore, output_dir=OUTPUT_BASE):
+async def process_supermarket_products(country, supermarket, products_list, llm, semaphore, output_dir=OUTPUT_BASE):
     """
-    This is a self-contained "worker" function. It handles one single task
-    (e.g., "avocado at Lidl in Germany") from start to finish, including
-    creating and destroying its own browser. This provides maximum isolation and stability.
+    This function handles all products for a single supermarket using one browser session.
+    It creates a new agent for each product to maintain LLM freshness.
     """
     async with semaphore:
-        task_id = f"{country}_{supermarket}_{product}"
-        print(f"▶️  [Worker] Starting task: {task_id}")
-        
-        # 1. Checkpointing: Check if the task is already done
-        output_dir = os.path.join(OUTPUT_BASE, country, supermarket)
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"{product}.json")
+        supermarket_id = f"{country}_{supermarket}"
+        print(f"▶️  [Worker] Starting supermarket session: {supermarket_id}")
 
-        # LOCAL TESTING: Skip the checkpointing to force re-runs
-        if os.path.exists(output_path):
-            print(f"⏭️  [Worker] Skipping {task_id}, output file already exists.")
+        # Quick pre-check: only proceed if there are pending products to process
+        supermarket_output_dir = os.path.join(OUTPUT_BASE, country, supermarket)
+        pending_products = []
+        for product, subtypes in products_list:
+            expected_path = os.path.join(supermarket_output_dir, f"{product}.json")
+            if not os.path.exists(expected_path):
+                pending_products.append((product, subtypes))
+
+        if not pending_products:
+            print(f"✅ [Worker] No pending products for {supermarket_id}. Skipping browser startup.")
             return
 
         browser_session = None
+        browser_context = None
         try:
+            print(f"🔄 [Browser] Creating shared browser session for {len(pending_products)} products in {supermarket_id}")
             
+            # Create a persistent user data directory for this supermarket
+            user_data_dir = os.path.join(
+                tempfile.gettempdir(),
+                "browser_use",
+                "profiles",
+                f"{country}_{supermarket}"
+            )
+            os.makedirs(user_data_dir, exist_ok=True)
+            # Remove Chromium session/tab dump files to prevent Chrome from
+            # restoring previously-open tabs (newsletters, account pages, etc.).
+            # This is a best-effort cleanup that avoids touching cookies/preferences.
+            try:
+                removed = _clean_chrome_session_files(user_data_dir)
+                if removed:
+                    print(f"🧹 [Browser] Removed {len(removed)} session/tab files to prevent tab restoration: {removed}")
+            except Exception as e:
+                print(f"⚠️ [Browser] Failed to clean session files: {e}")
+            
+            # Create and start browser session for this supermarket
+            # NOTE: we keep the user_data_dir so cookies/persistent storage survive,
+            # but we DO NOT ask the browser to restore previous tabs. Instead we
+            # sanitize open tabs after startup and explicitly open the supermarket homepage.
             browser_session = BrowserSession(
                 browser_profile=BrowserProfile(
-                    # Headless is better for long, unsupervised runs
                     headless=False,
-                    user_data_dir=os.environ.get("BROWSER_USER_DATA_DIR") or None,
-                    args=base_browser_args(country)
+                    keep_alive=True,  # Keep the browser process alive between actions
+                    user_data_dir=user_data_dir,  # Use persistent profile directory
+                    args=[*base_browser_args(country)]
                 )
             )
-            
+
+            print(f"📂 [Browser] Using profile dir: {user_data_dir}")
             print(f"DISPLAY={os.environ.get('DISPLAY')}")
-            print(f"BROWSER_USER_DATA_DIR={os.environ.get('BROWSER_USER_DATA_DIR')}")
             print(f"UA prefix: {(os.environ.get('BROWSER_USER_AGENT') or '')[:50]}")
+            
             await browser_session.start()
-            print(f"✅ [Worker] Browser started for task: {task_id}")
+            print(f"✅ [Browser] Session started for supermarket: {supermarket_id}")
 
-            # 3. Create and run the agent
-            prompt = PROMPT_TEMPLATE.format(
-                website_url=COUNTRIES[country][supermarket],
-                product=product,
-                subtypes=subtypes,
-                country=country,
-                supermarket=supermarket
-            )
-            print(f"🧠 [Worker] Created prompt for {task_id}.")
-            agent_artifact_dir = os.path.join(tempfile.gettempdir(), "browser_use", task_id)
+            # Sanitize session: if the current tab is not on the supermarket domain
+            # (or is in an unrelated section like 'newsletter'), close all tabs and
+            # open the supermarket homepage to ensure a clean starting point.
+            try:
+                homepage = COUNTRIES[country][supermarket]
+                desired_domain = urlparse(homepage).netloc.lower()
 
-            agent = Agent(
-                task=prompt,
-                browser_session=browser_session,
-                llm=llm,
-                output_model_schema=SupermarketOutput, # This was missing from your Agent() call before
-                output_dir=agent_artifact_dir,
-                id=task_id,
-                max_steps = 40
-            )
-            print(f"🚀 [Worker] created agent for {task_id}.")
+                current_page = await browser_session.get_current_page()
+                current_url = (getattr(current_page, 'url', '') or '').lower()
 
-            await run_agent_with_retry(agent, output_path, llm)
-            print(f"✅ [Worker] Agent finished for {task_id}.")
+                bad_keywords = ('newsletter', '/newsletter', '/account', '/recipes', '/clothes', '/fashion', '/promo')
+                needs_reset = False
+
+                if not current_url or desired_domain not in current_url:
+                    needs_reset = True
+                else:
+                    for kw in bad_keywords:
+                        if kw in current_url:
+                            needs_reset = True
+                            break
+
+                if needs_reset:
+                    try:
+                        print(f"🧹 [Browser] Session URL was unexpected ({current_url}), resetting to homepage {homepage}")
+                        # Close all existing pages and open a fresh one
+                        bc = getattr(browser_session, 'browser_context', None)
+                        if bc:
+                            try:
+                                pages = list(bc.pages)
+                                for p in pages:
+                                    try:
+                                        if not p.is_closed():
+                                            await p.close()
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+
+                            # Create a new page and navigate to homepage
+                            try:
+                                new_page = await bc.new_page()
+                                await new_page.goto(homepage)
+                                # Ensure the session object tracks this page
+                                browser_session.agent_current_page = new_page
+                                browser_session.human_current_page = new_page
+                                vp = getattr(browser_session.browser_profile, 'viewport', None)
+                                if vp is not None:
+                                    try:
+                                        await new_page.set_viewport_size(vp)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            except Exception as e:
+                # Non-fatal: log and continue; agent prompts will still navigate as needed
+                print(f"⚠️ [Browser] Session sanitization skipped due to error: {e}")
+
+            # Ensure output directory exists now that we will write files
+            os.makedirs(supermarket_output_dir, exist_ok=True)
+
+            # Process each pending product using the same browser session
+            for idx, (product, subtypes) in enumerate(pending_products, 1):
+                task_id = f"{country}_{supermarket}_{product}"
+                output_path = os.path.join(supermarket_output_dir, f"{product}.json")
+                print(f"🔄 [Browser] Product {idx}/{len(pending_products)} using shared session")
+
+                try:
+                    # Create new agent for each product
+                    if idx == 1:
+                        # First product: Use full prompt with website navigation
+                        prompt = PROMPT_FIRST_SUPERMARKET_PRODUCT.format(
+                            website_url=COUNTRIES[country][supermarket],
+                            product=product,
+                            subtypes=subtypes,
+                            country=country,
+                            supermarket=supermarket
+                        )
+                    else:
+                        # Subsequent products: Use simplified prompt for current session
+                        prompt = PROMPT_REST_SUPERMARKET_PRODUCTS.format(
+                            product=product,
+                            subtypes=subtypes,
+                            country=country,
+                            supermarket=supermarket
+                        )
+                    print(f"🧠 [Worker] Created prompt for {task_id}.")
+                    agent_artifact_dir = os.path.join(tempfile.gettempdir(), "browser_use", task_id)
+
+                    agent = Agent(
+                        task=prompt,
+                        browser_session=browser_session,
+                        llm=llm,
+                        output_model_schema=SupermarketOutput,
+                        output_dir=agent_artifact_dir,
+                        id=task_id,
+                        max_steps=40
+                    )
+                    print(f"🚀 [Worker] Created agent for {task_id}.")
+
+                    await run_agent_with_retry(agent, output_path, llm)
+                    print(f"✅ [Worker] Agent finished for {task_id}.")
+
+                    # Optional: Small delay between products to avoid overwhelming the site
+                    await asyncio.sleep(2)
+
+                except Exception as e:
+                    print(f"💥 [Worker] Error processing product {task_id}: {e}")
+                    if not os.path.exists(output_path):
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            json.dump({"products": []}, f, ensure_ascii=False, indent=2)
 
         except Exception as e:
-            print(f"💥 [Worker] A critical unhandled error occurred in task {task_id}: {e}")
-            # Ensure an empty file is still created so we don't retry this broken task
-            if not os.path.exists(output_path):
-                with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump({"products": []}, f, ensure_ascii=False, indent=2)
+            print(f"💥 [Worker] Critical error in supermarket session {supermarket_id}: {e}")
         finally:
-            # 4. Cleanup: Always ensure the browser instance is killed
+            # Cleanup: Ensure complete browser session cleanup after all products
             if browser_session:
-                await browser_session.kill()
-            print(f"⏹️  [Worker] Finished task: {task_id}")
+                try:
+                    # First disable keep_alive so stop() will actually close the browser
+                    browser_session.browser_profile.keep_alive = False
+                    
+                    # Try graceful stop first
+                    try:
+                        await browser_session.stop()
+                    except Exception as e:
+                        print(f"⚠️ [Browser] Graceful stop failed: {e}")
+                    
+                    # Then force kill to ensure cleanup
+                    try:
+                        await browser_session.kill()  # No force param needed
+                        print(f"🧹 [Worker] Cleaned up browser session for {supermarket_id}")
+                    except Exception as e:
+                        print(f"⚠️ [Browser] Kill failed: {e}")
+                        # Last resort: direct process kill if we can access it
+                        try:
+                            proc = getattr(browser_session, '_browser_process', None)
+                            if proc:
+                                import psutil
+                                if psutil.pid_exists(proc.pid):
+                                    proc.kill()
+                                    print(f"🔨 [Browser] Force-killed browser process {proc.pid}")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"💥 [Worker] Error during browser cleanup: {e}")
+            print(f"⏹️  [Worker] Finished supermarket session: {supermarket_id}")
 
 # --- NEW: Task Orchestrator ---
 async def main():
     """
-    This is the main "Orchestrator". It prepares the list of all jobs,
-    and then schedules them to run at a controlled pace.
+    This is the main "Orchestrator". It groups tasks by supermarket and
+    processes all products for each supermarket in a single browser session.
     """
-
     llm = ChatOpenAI(model='gpt-4o-mini-2024-07-18', api_key=os.getenv("OPENAI_API_KEY"))
-
     semaphore = asyncio.Semaphore(MAX_PARALLEL_BROWSERS)
 
-    # Create a list of all jobs to be done
-    all_jobs = []
+    # Group jobs by country and supermarket
+    supermarket_jobs = {}
     for country, supermarkets in COUNTRIES.items():
         for supermarket in supermarkets:
+            key = (country, supermarket)
+            supermarket_jobs[key] = []
             for product, subtypes in PRODUCTS.items():
-                all_jobs.append((country, supermarket, product, subtypes))
+                supermarket_jobs[key].append((product, subtypes))
     
-    print(f"Found {len(all_jobs)} total jobs to process.")
+    print(f"Found {len(supermarket_jobs)} supermarkets to process.")
     
     tasks = []
-    for job in all_jobs:
-        country, supermarket, product, subtypes = job
-        
-        # Create and schedule the worker task
+    for (country, supermarket), products_list in supermarket_jobs.items():
+        print(f"Scheduling supermarket {supermarket} in {country} with {len(products_list)} products")
+        # Quick pre-check: only schedule supermarkets that have pending products
+        supermarket_output_dir = os.path.join(OUTPUT_BASE, country, supermarket)
+        pending_products = []
+        for product, subtypes in products_list:
+            expected_path = os.path.join(supermarket_output_dir, f"{product}.json")
+            if not os.path.exists(expected_path):
+                pending_products.append((product, subtypes))
+
+        if not pending_products:
+            print(f"⏭️  Skipping supermarket {supermarket} in {country}: all products already processed.")
+            continue
+
+        # Create and schedule the supermarket worker task (only for pending products)
         task = asyncio.create_task(
-            process_supermarket_task(country, supermarket, product, subtypes, llm, semaphore)
+            process_supermarket_products(country, supermarket, pending_products, llm, semaphore)
         )
         tasks.append(task)
-        
-        # Rate Limiting: Wait for a few seconds before scheduling the next one
+
+        # Rate Limiting: Wait between starting new supermarket sessions
         await asyncio.sleep(SECONDS_BETWEEN_TASKS)
     
     # Wait for all scheduled tasks to complete
     await asyncio.gather(*tasks)
-    print("✅ All tasks have been processed. Script finished.")
+    print("✅ All supermarkets have been processed. Script finished.")
 
 if __name__ == "__main__":
     asyncio.run(main())
