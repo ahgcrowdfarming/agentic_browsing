@@ -17,22 +17,22 @@ COUNTRIES = {
     # },
     "France": {
         "Carrefour": "https://www.carrefour.fr",
-        # "Intermarché": "https://www.intermarche.com", -> blocked
+        # "Intermarché": "https://www.intermarche.com", 
         # "LRQDO": "https://laruchequiditoui.fr/fr/assemblies?fullAddress=Paris%2C+France#11/48.8535/2.3484",
         # "La Fourche": "https://lafourche.fr/",
-        # # "Le Fourgon" : "https://www.lefourgon.com/", -> complex website, no results found
-        # # "Santafoo": "https://santafoo.fr/",
-        # # "Auchan": "https://www.auchan.fr", -> no online prices
-        # "Monoprix": "https://courses.monoprix.fr/",
-        # # "Naturalia": "https://www.naturalia.fr/",
-        # # "Chronodrive": "https://www.chronodrive.com/",
-        # #"Casino": "https://www.casino.fr", -> no online prices
-        # "Mon Marché": "https://www.monmarche.fr",
-        # "Lidl": "https://www.lidl.fr",
-        # "Cora": "https://www.cora.fr",
-        # # "Franprix": "https://www.franprix.fr",      
-        # # "Neary": "https://www.neary.fr",
-        # "Potager City": "https://www.potagercity.fr"
+        # "Le Fourgon" : "https://www.lefourgon.com/", -> complex website, no results found
+        # "Santafoo": "https://santafoo.fr/",
+        # "Auchan": "https://www.auchan.fr", -> no online prices
+        "Monoprix": "https://courses.monoprix.fr/", # Explain to agent that should press enter after product name given that with just typing the drop down covers most of the screen and you cant see most of the items on screen. Theyre also not filtered.
+        # "Naturalia": "https://www.naturalia.fr/",
+        # "Chronodrive": "https://www.chronodrive.com/",
+        #"Casino": "https://www.casino.fr", -> no online prices
+        "Mon Marché": "https://www.mon-marche.fr",
+        "Lidl": "https://www.lidl.fr",
+        # "Cora": "https://www.cora.fr", -> redirects to carrefour
+        # "Franprix": "https://www.franprix.fr",      
+        # "Neary": "https://www.neary.fr",
+        "Potager City": "https://www.potagercity.fr"
     },
     
     # "United Kingdom": {
@@ -81,19 +81,19 @@ COUNTRIES = {
     #     "Grocery Online": "https://groceryonline.se/",
     #     "Coop": "https://www.coop.se/"
     # },
-    # "Austria": {
-    #     "BILLA": "https://shop.billa.at",
-    #     "INTERSPAR": "https://www.interspar.at",
-    #     "Spar": "https://www.spar.at",
-    #     "MPreis": "https://www.mpreis.at/",
-    #     "Gurkel": "https://gurkerl.at/",
-    #     "Penny": "https://www.penny.at/",
-    #     "Hofer": "https://www.hofer.at/",
-    #     "Lidl": "https://www.lidl.at/",
-    #     #"Unimarkt": "https://www.unimarkt.at/",
-    #     #"Nah&Frisch": "https://www.nahundfrisch.at/",
-    #     "Spar Gourmet": "https://www.spar.at/gourmet"
-    # }
+    "Austria": {
+        "BILLA": "https://shop.billa.at",
+        "INTERSPAR": "https://www.interspar.at",
+        "Spar": "https://www.spar.at",
+        "MPreis": "https://www.mpreis.at/",
+        "Gurkel": "https://gurkerl.at/",
+        "Penny": "https://www.penny.at/",
+        "Hofer": "https://www.hofer.at/",
+        "Lidl": "https://www.lidl.at/",
+        #"Unimarkt": "https://www.unimarkt.at/",
+        #"Nah&Frisch": "https://www.nahundfrisch.at/",
+        "Spar Gourmet": "https://www.spar.at/gourmet"
+    }
 
 
 }

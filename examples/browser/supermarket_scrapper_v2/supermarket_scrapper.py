@@ -50,6 +50,7 @@ class Product(BaseModel):
     supermarket_name: str
     country: str
     bio: bool
+    scrapped_date: Optional[str] = None
     # model_used: Optional[str] = None
     # run_total_tokens: Optional[int] = None
     # estimated_cost: Optional[float] = None
@@ -69,7 +70,7 @@ class SupermarketOutput(BaseModel):
 # --- SCRIPT CONTROLS ---
 # The number of parallel browser instances to run.
 # Start with 2 or 3 to be safe. Increase if your machine and API limits can handle it.
-MAX_PARALLEL_BROWSERS = 1
+MAX_PARALLEL_BROWSERS = 3
 
 # The number of seconds to wait between starting each new task.
 # This is crucial for respecting Tokens-Per-Minute (TPM) limits. 5-10 seconds is a good start.
@@ -152,12 +153,12 @@ def _build_product_id_from_output(output_path: str, product: dict) -> str:
 
     price_str = price_str.replace(".", "_")
 
-    # date normalization: expect dd/mm/YYYY
-    date_str = product.get("scrapped_date") or date.today().strftime("%d/%m/%Y")
+    # date normalization: expect YYYY-MM-DD
+    date_str = product.get("scrapped_date") or date.today().strftime("%Y-%m-%d")
     try:
-        d, m, y = re.split(r"[\/\-\.]", date_str)[:3]
+        y, m, d = re.split(r"[\/\-\.]", date_str)[:3]
     except Exception:
-        d, m, y = date.today().strftime("%d"), date.today().strftime("%m"), date.today().strftime("%Y")
+        y, m, d = date.today().strftime("%Y"), date.today().strftime("%m"), date.today().strftime("%d")
 
     # sanitize parts (lowercase, keep alnum, replace other chars with '-')
     def _sanitize(s: str) -> str:
@@ -177,6 +178,35 @@ def _build_product_id_from_output(output_path: str, product: dict) -> str:
     ]
     return "_".join(id_parts)
 
+
+def add_partition_columns(data_dict: dict) -> dict:
+    """Add year, month, day partition columns to the dictionary for Foundry compatibility.
+    These are inferred from scrapped_date and added only during serialization."""
+    result = data_dict.copy()
+    
+    # Get products list and ensure it exists
+    products = result.get('products', [])
+    if not products:
+        return result
+        
+    # Add partition columns to each product
+    for product in products:
+        if 'scrapped_date' in product:
+            try:
+                # Parse date components from scrapped_date (YYYY-MM-DD format)
+                y, m, d = product['scrapped_date'].split('-')
+                # Add partition columns as separate fields
+                product['year'] = int(y)
+                product['month'] = int(m)
+                product['day'] = int(d)
+            except (ValueError, AttributeError):
+                # If parsing fails, use today's date as fallback
+                today = date.today()
+                product['year'] = today.year
+                product['month'] = today.month
+                product['day'] = today.day
+    
+    return result
 
 # --- Agent Runner (unchanged, it's perfect) ---
 async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
@@ -198,11 +228,15 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
                 print(f"✅ [Agent] Found structured_output from library for {os.path.basename(output_path)}.")
                 final_data = result.structured_output.model_dump()
                 final_data = add_agent_cost_to_product_data(final_data, result, llm)
+                today = date.today()
                 for product in final_data.get('products', []):
-                    product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                    product['scrapped_date'] = today.strftime("%Y-%m-%d")
                     product['_id'] = _build_product_id_from_output(output_path, product)
+                
+                # Add partition columns just before writing
+                final_data_with_partitions = add_partition_columns(final_data)
                 with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(final_data, f, ensure_ascii=False, indent=2)
+                    json.dump(final_data_with_partitions, f, ensure_ascii=False, indent=2)
                 print(f"   -> Saved results to: {output_path}")
                 return True
 
@@ -214,11 +248,15 @@ async def run_agent_with_retry(agent, output_path, llm, max_retries=1):
                     SupermarketOutput.model_validate(final_data)
                     print(f"🧩 [Agent Debug] Output model validated successfully.")
                     final_data = add_agent_cost_to_product_data(final_data, result, llm)
+                    today = date.today()
                     for product in final_data.get('products', []):
-                        product['scrapped_date'] = date.today().strftime("%d/%m/%Y")
+                        product['scrapped_date'] = today.strftime("%Y-%m-%d")
                         product['_id'] = _build_product_id_from_output(output_path, product)
+                    
+                    # Add partition columns just before writing
+                    final_data_with_partitions = add_partition_columns(final_data)
                     with open(output_path, "w", encoding="utf-8") as f:
-                        json.dump(final_data, f, ensure_ascii=False, indent=2)
+                        json.dump(final_data_with_partitions, f, ensure_ascii=False, indent=2)
                     print(f"   -> Successfully parsed and saved results to: {output_path}")
                     return True
                 except (json.JSONDecodeError, ValidationError) as e:

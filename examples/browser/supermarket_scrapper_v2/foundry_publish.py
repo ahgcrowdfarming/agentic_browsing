@@ -11,6 +11,7 @@ from typing import Dict, Any, Iterable, List, Set
 
 from supermarket_scrapper import main as run_scraper
 from foundry import FoundryUploader
+from products import PRODUCTS
 
 # --- CONFIGURATION ---
 BASE_DIR = Path(__file__).parent.resolve()
@@ -49,6 +50,8 @@ def load_product_records() -> List[Dict[str, Any]]:
     for jf in json_files(OUTPUT_DIR):
         country = jf.parents[1].name
         supermarket = jf.parents[0].name
+        product_name = jf.stem  # Get filename without extension
+        
         try:
             with open(jf, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -70,8 +73,25 @@ def load_product_records() -> List[Dict[str, Any]]:
         for r in recs:
             if not isinstance(r, dict):
                 continue
+                
+            # FIX 1: Enforce product name from filename
+            r["name"] = product_name
+            
+            # FIX 2: Validate subtype
+            valid_subtypes = PRODUCTS.get(product_name, [])
+            valid_subtypes_lower = [subtype.lower() for subtype in valid_subtypes]
+            if "subtype" not in r or not r.get("subtype") or r["subtype"].lower() not in valid_subtypes_lower:
+                r["subtype"] = product_name
+            
+            # FIX 3: Ensure scrapped_date exists
+            if "scrapped_date" not in r or not r.get("scrapped_date"):
+                from datetime import date
+                r["scrapped_date"] = date.today().strftime("%Y-%m-%d")
+            
+            # Add standard fields
             r.setdefault("country", country)
             r.setdefault("supermarket_name", supermarket)
+            
             rows.append(clean_nulls(r))
     return rows
 
